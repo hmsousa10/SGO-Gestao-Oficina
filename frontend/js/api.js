@@ -120,7 +120,12 @@ const api = {
   // A Função de Movimento Corrigida!
   registerMovimentoStock: (id, data) => {
     const endpoint = data.tipo === 'ENTRADA' ? `/pecas/${id}/entrada-stock` : `/pecas/${id}/saida-stock`;
-    return apiRequest(endpoint, 'POST', data);
+    const payload = {
+      quantidade: data.quantidade,
+      observacoes: data.observacoes,
+      ...(data.precoCusto !== undefined ? { precoCusto: data.precoCusto } : {}),
+    };
+    return apiRequest(endpoint, 'POST', payload);
   },
 
   /* Dashboard */

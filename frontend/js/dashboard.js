@@ -7,6 +7,7 @@
 let kpiRefreshTimer = null;
 let chartEstadosInst = null;
 let chartValoresInst = null;
+let chartConcluidasInst = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!initProtectedPage(['MANAGER'])) return;
@@ -15,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Chart.defaults.color = document.documentElement.getAttribute('data-theme') === 'dark' ? '#cbd5e1' : '#475569';
   
   refreshDashboard();
+  loadChartFilters();
   loadUsers();
   startClock();
   initNotifications();
@@ -27,6 +29,41 @@ async function refreshDashboard() {
   const now = new Date();
   const el = document.getElementById('last-updated');
   if (el) el.textContent = `Atualizado às ${now.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+async function loadChartFilters() {
+  const select = document.getElementById('chart-mecanico-filter');
+  if (!select) return;
+  try {
+    const mecanicos = await api.getMecanicos() || [];
+    select.innerHTML = '<option value="">Todos os mecânicos</option>' +
+      mecanicos.map(m => `<option value="${m.id}">${escapeHtml(m.name || m.username || ('Mecânico #' + m.id))}</option>`).join('');
+  } catch (_) {
+    select.innerHTML = '<option value="">Todos os mecânicos</option>';
+  }
+}
+
+function isInCurrentPeriod(dateValue, period) {
+  if (!dateValue || period === 'all') return true;
+  const d = new Date(dateValue);
+  if (isNaN(d)) return false;
+
+  const now = new Date();
+  if (period === 'month') {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+
+  if (period === 'week') {
+    const day = (now.getDay() + 6) % 7; // monday=0
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(now.getDate() - day);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    return d >= start && d < end;
+  }
+
+  return true;
 }
 
 /* ── Últimas Reparações ── */
@@ -62,13 +99,22 @@ async function loadRecentReparacoes() {
 async function loadChartsData() {
   try {
     const reparacoes = await api.getReparacoes();
+    const mecanicoId = document.getElementById('chart-mecanico-filter')?.value || '';
+    const period = document.getElementById('chart-period-filter')?.value || 'all';
     
-    // Backend usa EM_EXECUCAO para o estado "em progresso"
-    let contagem = { 'PENDENTE': 0, 'EM_EXECUCAO': 0, 'AGUARDA_PECAS': 0, 'CONCLUIDA': 0 };
+    // Estado operacional atual: só trabalhos ativos (sem concluídas/canceladas)
+    let contagem = { 'PENDENTE': 0, 'EM_EXECUCAO': 0, 'AGUARDA_PECAS': 0 };
     let valores  = { 'PENDENTE': 0, 'EM_EXECUCAO': 0, 'AGUARDA_PECAS': 0 };
 
-    if (reparacoes && reparacoes.length > 0) {
-      reparacoes.forEach(r => {
+    const reparacoesFiltradas = (reparacoes || []).filter(r => {
+      const byMecanico = !mecanicoId || String(r.mecanicoId || '') === String(mecanicoId);
+      const referenceDate = r.dataInicio || r.dataFim;
+      const byPeriod = isInCurrentPeriod(referenceDate, period);
+      return byMecanico && byPeriod;
+    });
+
+    if (reparacoesFiltradas.length > 0) {
+      reparacoesFiltradas.forEach(r => {
         if (contagem[r.estado] !== undefined) contagem[r.estado]++;
         if (r.estado !== 'CONCLUIDA' && r.estado !== 'CANCELADA' && r.valorTotal) {
           if (valores[r.estado] !== undefined) valores[r.estado] += r.valorTotal;
@@ -77,11 +123,121 @@ async function loadChartsData() {
     }
 
     renderChartEstados(contagem);
-    renderChartValores(valores);
+    renderChartValores(valores, contagem);
+    renderConcluidasTendencia(reparacoesFiltradas, period);
 
   } catch (error) {
     console.error('Erro ao carregar dados para os gráficos:', error);
   }
+}
+
+function renderConcluidasTendencia(reparacoesFiltradas, period) {
+  const concluida = reparacoesFiltradas.filter(r => r.estado === 'CONCLUIDA' && r.dataFim);
+  const valueEl = document.getElementById('concluidas-periodo-value');
+  if (valueEl) valueEl.textContent = String(concluida.length);
+
+  const canvas = document.getElementById('chartConcluidas');
+  if (!canvas) return;
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const ctx = canvas.getContext('2d');
+
+  if (chartConcluidasInst) chartConcluidasInst.destroy();
+
+  const trend = buildConcluidasSeries(concluida, period);
+  chartConcluidasInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: trend.labels,
+      datasets: [{
+        label: 'Concluídas',
+        data: trend.data,
+        backgroundColor: 'rgba(16,185,129,.65)',
+        borderColor: '#10b981',
+        borderWidth: 1,
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            color: isDark ? '#94a3b8' : '#64748b'
+          },
+          grid: { color: isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)' }
+        },
+        x: {
+          ticks: { color: isDark ? '#94a3b8' : '#64748b' },
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` Concluídas: ${ctx.raw}`
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildConcluidasSeries(concluidas, period) {
+  if (period === 'week') {
+    const labels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+    const data = [0, 0, 0, 0, 0, 0, 0];
+    concluidas.forEach(r => {
+      const d = new Date(r.dataFim);
+      const idx = (d.getDay() + 6) % 7;
+      data[idx] += 1;
+    });
+    return { labels, data };
+  }
+
+  if (period === 'month') {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const maxDay = new Date(year, month + 1, 0).getDate();
+    const weekCount = Math.ceil(maxDay / 7);
+    const labels = Array.from({ length: weekCount }, (_, i) => `Sem ${i + 1}`);
+    const data = Array.from({ length: weekCount }, () => 0);
+    concluidas.forEach(r => {
+      const d = new Date(r.dataFim);
+      const weekIdx = Math.floor((d.getDate() - 1) / 7);
+      if (weekIdx >= 0 && weekIdx < data.length) data[weekIdx] += 1;
+    });
+    return { labels, data };
+  }
+
+  // Todo o período: últimos 6 meses
+  const labels = [];
+  const data = [];
+  const cursor = new Date();
+  cursor.setDate(1);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+    labels.push(d.toLocaleDateString('pt-PT', { month: 'short' }));
+    data.push(0);
+  }
+  concluidas.forEach(r => {
+    const d = new Date(r.dataFim);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    for (let i = 0; i < 6; i++) {
+      const cmp = new Date(cursor.getFullYear(), cursor.getMonth() - (5 - i), 1);
+      if (key === `${cmp.getFullYear()}-${cmp.getMonth()}`) {
+        data[i] += 1;
+        break;
+      }
+    }
+  });
+  return { labels, data };
 }
 
 /* ── DESENHAR O GRÁFICO CIRCULAR ── */
@@ -97,10 +253,10 @@ function renderChartEstados(contagem) {
   chartEstadosInst = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Pendentes', 'Em Progresso', 'Aguarda Peças', 'Concluídas'],
+      labels: ['Pendentes', 'Em Execução', 'Aguarda Peças'],
       datasets: [{
-        data: [contagem.PENDENTE, contagem.EM_EXECUCAO, contagem.AGUARDA_PECAS, contagem.CONCLUIDA],
-        backgroundColor: ['#3b82f6', '#eab308', '#f97316', '#10b981'],
+        data: [contagem.PENDENTE, contagem.EM_EXECUCAO, contagem.AGUARDA_PECAS],
+        backgroundColor: ['#3b82f6', '#eab308', '#f97316'],
         borderWidth: 2,
         borderColor: isDark ? '#1e293b' : '#ffffff',
         hoverOffset: 10
@@ -120,7 +276,7 @@ function renderChartEstados(contagem) {
         },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.label}: ${ctx.raw} reparações`
+            label: ctx => ` ${ctx.label}: ${ctx.raw} trabalhos ativos`
           }
         }
       }
@@ -135,21 +291,38 @@ function renderChartValores(valores) {
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const ctx = canvas.getContext('2d');
+  const data = [valores.PENDENTE || 0, valores.EM_EXECUCAO || 0, valores.AGUARDA_PECAS || 0];
+  const total = data.reduce((acc, v) => acc + v, 0);
+  const maxValue = Math.max(...data, 0);
+  const emptyEl = document.getElementById('chart-valores-empty');
+
+  if (emptyEl) {
+    if (total <= 0) emptyEl.classList.remove('hidden');
+    else emptyEl.classList.add('hidden');
+  }
+
+  const g1 = ctx.createLinearGradient(0, 0, 0, 260);
+  g1.addColorStop(0, 'rgba(59,130,246,.95)');
+  g1.addColorStop(1, 'rgba(59,130,246,.35)');
+
+  const g2 = ctx.createLinearGradient(0, 0, 0, 260);
+  g2.addColorStop(0, 'rgba(234,179,8,.95)');
+  g2.addColorStop(1, 'rgba(234,179,8,.35)');
+
+  const g3 = ctx.createLinearGradient(0, 0, 0, 260);
+  g3.addColorStop(0, 'rgba(249,115,22,.95)');
+  g3.addColorStop(1, 'rgba(249,115,22,.35)');
   
   if (chartValoresInst) chartValoresInst.destroy();
 
   chartValoresInst = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['Pendentes', 'Em Progresso', 'Aguarda Peças'],
+      labels: ['Pendentes', 'Em Execução', 'Aguarda Peças'],
       datasets: [{
         label: 'Valor em Euros (€)',
-        data: [valores.PENDENTE, valores.EM_EXECUCAO, valores.AGUARDA_PECAS],
-        backgroundColor: [
-          'rgba(59,130,246,.7)',
-          'rgba(234,179,8,.7)',
-          'rgba(249,115,22,.7)'
-        ],
+        data,
+        backgroundColor: [g1, g2, g3],
         borderColor: ['#3b82f6','#eab308','#f97316'],
         borderWidth: 1,
         borderRadius: 6,
@@ -162,15 +335,26 @@ function renderChartValores(valores) {
       scales: {
         y: {
           beginAtZero: true,
+          suggestedMax: maxValue > 0 ? Math.ceil(maxValue * 1.2) : 100,
           grid: { color: isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)' },
-          ticks: { color: isDark ? '#94a3b8' : '#64748b', callback: v => '€' + v }
+          ticks: {
+            color: isDark ? '#94a3b8' : '#64748b',
+            callback: v => formatCurrency(v)
+          }
         },
         x: {
           grid: { display: false },
           ticks: { color: isDark ? '#94a3b8' : '#64748b' }
         }
       },
-      plugins: { legend: { display: false } }
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${formatCurrency(ctx.raw || 0)}`
+          }
+        }
+      }
     }
   });
 }

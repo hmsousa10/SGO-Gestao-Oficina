@@ -88,10 +88,29 @@
         <div class="two-col-layout">
           <div class="card">
             <div class="card-header">
-              <h2 class="card-title">📊 Distribuição de Trabalhos</h2>
+              <h2 class="card-title">📊 Estado Operacional (Ativo)</h2>
+              <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                <select id="chart-mecanico-filter" class="btn btn-secondary btn-sm" style="padding:.35rem .6rem; min-width:180px;" onchange="loadChartsData()">
+                  <option value="">Todos os mecânicos</option>
+                </select>
+                <select id="chart-period-filter" class="btn btn-secondary btn-sm" style="padding:.35rem .6rem; min-width:150px;" onchange="loadChartsData()">
+                  <option value="all">Todo o período</option>
+                  <option value="week">Esta semana</option>
+                  <option value="month">Este mês</option>
+                </select>
+              </div>
             </div>
             <div class="card-body" style="position:relative;height:300px;display:flex;justify-content:center;">
               <canvas id="chartEstados"></canvas>
+            </div>
+            <div class="card-body" style="border-top:1px solid var(--border); padding-top:1rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem;">
+                <span style="font-size:.85rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700; letter-spacing:.02em;">Concluídas no Período</span>
+                <span id="concluidas-periodo-value" class="badge badge-success" style="font-size:.85rem;">0</span>
+              </div>
+              <div style="position:relative; height:120px;">
+                <canvas id="chartConcluidas"></canvas>
+              </div>
             </div>
           </div>
           <div class="card">
@@ -99,7 +118,11 @@
               <h2 class="card-title">💰 Valor em Curso (€)</h2>
             </div>
             <div class="card-body" style="position:relative;height:300px;">
+              <div style="font-size:.8rem; color:var(--text-secondary); margin-bottom:.5rem; text-transform:uppercase; letter-spacing:.02em; font-weight:700;">Estimativa por estado ativo</div>
               <canvas id="chartValores"></canvas>
+              <div id="chart-valores-empty" class="hidden" style="margin-top:.6rem; padding:.8rem 1rem; border:1px dashed var(--border); border-radius:10px; background:rgba(148,163,184,.08); color:var(--text-secondary); font-size:.85rem; font-weight:600; text-align:center;">
+                Sem valor em curso para o filtro selecionado
+              </div>
             </div>
           </div>
         </div>
