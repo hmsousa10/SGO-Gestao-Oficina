@@ -103,7 +103,11 @@ public class ReparacaoService {
                     .orElseThrow(() -> new ResourceNotFoundException("Reparacao", id));
             Reparacao.EstadoReparacao novoEstado;
             try {
-                novoEstado = Reparacao.EstadoReparacao.valueOf(estado.toUpperCase());
+                String estadoNormalizado = estado != null ? estado.toUpperCase() : "";
+                if ("EM_PROGRESSO".equals(estadoNormalizado)) {
+                    estadoNormalizado = "EM_EXECUCAO";
+                }
+                novoEstado = Reparacao.EstadoReparacao.valueOf(estadoNormalizado);
             } catch (IllegalArgumentException e) {
                 throw new BusinessException("Invalid estado: " + estado);
             }
@@ -235,37 +239,49 @@ public class ReparacaoService {
         List<OperacaoResponse> operacoes = r.getOperacoes() != null
                 ? r.getOperacoes().stream().map(this::toOperacaoResponse).collect(Collectors.toList())
                 : List.of();
+
+        Viatura viatura = r.getViatura();
+        Cliente cliente = r.getCliente();
+        User mecanico = r.getMecanico();
+        Agendamento agendamento = r.getAgendamento();
                 
         // EXTRAIR PEÇAS DA BD PARA ENVIAR PARA A FATURAÇÃO
         List<ReparacaoResponse.PecaUtilizada> pecasUsadas = r.getMovimentosStock() != null
                 ? r.getMovimentosStock().stream()
-                .map(m -> new ReparacaoResponse.PecaUtilizada(
-                        m.getPeca().getDesignacao(),
-                        Math.abs(m.getQuantidade()), // Math.abs garante que quantidades negativas (saídas) viram positivas na fatura
-                        m.getPeca().getPrecoUnitario()
-                )).collect(Collectors.toList())
+            .filter(m -> m != null && m.getPeca() != null)
+            .map(m -> new ReparacaoResponse.PecaUtilizada(
+                m.getPeca().getDesignacao(),
+                m.getQuantidade() != null ? Math.abs(m.getQuantidade()) : 0,
+                m.getPeca().getPrecoUnitario()
+            )).collect(Collectors.toList())
                 : List.of();
 
         return new ReparacaoResponse(
                 r.getId(),
-                r.getAgendamento() != null ? r.getAgendamento().getId() : null,
-                r.getViatura().getId(), 
-                r.getViatura().getMatricula(),
-                r.getViatura().getMarca(), 
-                r.getViatura().getModelo(),
-                r.getCliente().getId(), r.getCliente().getNome(),
-                r.getMecanico() != null ? r.getMecanico().getId() : null,
-                r.getMecanico() != null ? r.getMecanico().getName() : null,
-                r.getDataInicio(), r.getDataFim(), r.getEstado().name(),
+            agendamento != null ? agendamento.getId() : null,
+            viatura != null ? viatura.getId() : null,
+            viatura != null ? viatura.getMatricula() : null,
+            viatura != null ? viatura.getMarca() : null,
+            viatura != null ? viatura.getModelo() : null,
+            cliente != null ? cliente.getId() : null,
+            cliente != null ? cliente.getNome() : null,
+            mecanico != null ? mecanico.getId() : null,
+            mecanico != null ? mecanico.getName() : null,
+                r.getDataInicio(), r.getDataFim(), normalizeEstado(r.getEstado()),
                 r.getDescricao(), r.getTempoTotalMinutos(), r.getValorTotal(), 
                 operacoes,
                 pecasUsadas // <--- PEÇAS ADICIONADAS AQUI PARA O FRONTEND AS APANHAR!
         );
     }
 
+    private String normalizeEstado(Reparacao.EstadoReparacao estado) {
+        if (estado == null) return null;
+        return estado == Reparacao.EstadoReparacao.EM_PROGRESSO ? "EM_EXECUCAO" : estado.name();
+    }
+
     private OperacaoResponse toOperacaoResponse(OperacaoReparacao o) {
-        return new OperacaoResponse(o.getId(), o.getReparacao().getId(), o.getDescricao(),
-                o.getTempoEstimadoMinutos(), o.getTempoRealMinutos(), o.getEstado().name(),
+        return new OperacaoResponse(o.getId(), o.getReparacao() != null ? o.getReparacao().getId() : null, o.getDescricao(),
+            o.getTempoEstimadoMinutos(), o.getTempoRealMinutos(), o.getEstado() != null ? o.getEstado().name() : null,
                 o.getDataInicio(), o.getDataFim(), o.getObservacoes());
     }
 

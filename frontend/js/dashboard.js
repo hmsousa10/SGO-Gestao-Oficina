@@ -63,9 +63,9 @@ async function loadChartsData() {
   try {
     const reparacoes = await api.getReparacoes();
     
-    // Usar EM_PROGRESSO (nome correto do backend)
-    let contagem = { 'PENDENTE': 0, 'EM_PROGRESSO': 0, 'AGUARDA_PECAS': 0, 'CONCLUIDA': 0 };
-    let valores  = { 'PENDENTE': 0, 'EM_PROGRESSO': 0, 'AGUARDA_PECAS': 0 };
+    // Backend usa EM_EXECUCAO para o estado "em progresso"
+    let contagem = { 'PENDENTE': 0, 'EM_EXECUCAO': 0, 'AGUARDA_PECAS': 0, 'CONCLUIDA': 0 };
+    let valores  = { 'PENDENTE': 0, 'EM_EXECUCAO': 0, 'AGUARDA_PECAS': 0 };
 
     if (reparacoes && reparacoes.length > 0) {
       reparacoes.forEach(r => {
@@ -99,7 +99,7 @@ function renderChartEstados(contagem) {
     data: {
       labels: ['Pendentes', 'Em Progresso', 'Aguarda Peças', 'Concluídas'],
       datasets: [{
-        data: [contagem.PENDENTE, contagem.EM_PROGRESSO, contagem.AGUARDA_PECAS, contagem.CONCLUIDA],
+        data: [contagem.PENDENTE, contagem.EM_EXECUCAO, contagem.AGUARDA_PECAS, contagem.CONCLUIDA],
         backgroundColor: ['#3b82f6', '#eab308', '#f97316', '#10b981'],
         borderWidth: 2,
         borderColor: isDark ? '#1e293b' : '#ffffff',
@@ -144,7 +144,7 @@ function renderChartValores(valores) {
       labels: ['Pendentes', 'Em Progresso', 'Aguarda Peças'],
       datasets: [{
         label: 'Valor em Euros (€)',
-        data: [valores.PENDENTE, valores.EM_PROGRESSO, valores.AGUARDA_PECAS],
+        data: [valores.PENDENTE, valores.EM_EXECUCAO, valores.AGUARDA_PECAS],
         backgroundColor: [
           'rgba(59,130,246,.7)',
           'rgba(234,179,8,.7)',

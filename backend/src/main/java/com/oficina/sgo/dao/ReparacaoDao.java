@@ -25,7 +25,7 @@ public class ReparacaoDao {
 
     public long countAtivas(EntityManager em) {
         return em.createQuery(
-                "SELECT COUNT(r) FROM Reparacao r WHERE r.estado = 'EM_EXECUCAO'", Long.class)
+                "SELECT COUNT(r) FROM Reparacao r WHERE r.estado IN ('EM_EXECUCAO', 'EM_PROGRESSO')", Long.class)
                 .getSingleResult();
     }
 

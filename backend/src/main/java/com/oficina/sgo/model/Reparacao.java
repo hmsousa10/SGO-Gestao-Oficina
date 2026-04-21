@@ -74,6 +74,8 @@ public class Reparacao {
     public enum EstadoReparacao {
         PENDENTE, 
         EM_EXECUCAO, 
+        // Legacy status kept for backwards compatibility with older rows in DB.
+        EM_PROGRESSO,
         AGUARDA_PECAS, // <--- ADICIONAR ESTA LINHA
         CONCLUIDA, 
         CANCELADA
