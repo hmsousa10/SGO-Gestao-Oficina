@@ -1416,6 +1416,10 @@ textarea { resize: vertical; min-height: 80px; }
 .section { margin-bottom: 2rem; }
 .section:last-child { margin-bottom: 0; }
 
+#users-section {
+  margin-top: 1rem;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -1511,6 +1515,18 @@ textarea { resize: vertical; min-height: 80px; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  align-items: stretch;
+}
+
+.two-col-layout > .section {
+  margin-bottom: 0;
+  display: flex;
+}
+
+.two-col-layout > .section > .card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Separator ── */
@@ -2044,6 +2060,18 @@ body.tablet-mode .sidebar-overlay { display: block; }
 }
 
 /* ── Recent Repairs Widget ── */
+.recent-reps-widget {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+.recent-reps-list {
+  min-height: 236px;
+  flex: 1;
+}
+
 .recent-rep-item {
   display: flex;
   align-items: center;
@@ -2058,3 +2086,39 @@ body.tablet-mode .sidebar-overlay { display: block; }
 
 .recent-rep-matricula { font-weight: 700; font-size: .9rem; font-family: monospace; }
 .recent-rep-cliente { font-size: .8rem; color: var(--text-secondary); }
+
+.recent-reps-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  margin-top: auto;
+}
+
+#recent-reps-list {
+  flex: 1;
+  min-height: 302px;
+  display: flex;
+  flex-direction: column;
+}
+
+#card-alertas-stock .table-wrapper {
+  flex: 1;
+  min-height: 302px;
+}
+
+.recent-reps-page-info {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .recent-reps-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

@@ -240,9 +240,13 @@ function formatTimeOnly(dateString) {
 
 /* ── Card: Peças Aplicadas a esta Reparação ── */
 function renderPecasAplicadas(r) {
-  const movimentos = r.pecasUsadas || r.movimentosStock || [];
+  const movimentos = r.pecas || r.pecasUsadas || r.movimentosStock || [];
   const valorOps = (r.operacoes || []).reduce((sum, o) => sum + (o.tempoRealMinutos || 0) * 1.5, 0); // €1.5/min mão obra
-  const valorPecas = movimentos.reduce((sum, m) => sum + ((m.precoUnitario || m.precoPeca || 0) * (m.quantidade || 1)), 0);
+  const valorPecas = movimentos.reduce((sum, m) => {
+    const qtd = Math.abs(m.quantidade || 0);
+    const preco = m.precoUnitario || m.precoPeca || 0;
+    return sum + (preco * qtd);
+  }, 0);
   const valorTotal = r.valorTotal ? parseFloat(r.valorTotal) : (valorOps + valorPecas);
 
   if (!movimentos.length) {
@@ -433,16 +437,17 @@ function renderPecasTable(pecas) {
   if (!pecas.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding:1rem">Nenhuma peça encontrada</td></tr>`; return; }
   
   tbody.innerHTML = pecas.map(p => {
-    const lowStock = p.stockAtual <= p.stockMinimo;
-    const outOfStock = p.stockAtual <= 0;
+    const stockAtual = p.quantidadeStock ?? p.stockAtual ?? 0;
+    const lowStock = stockAtual <= (p.stockMinimo ?? 0);
+    const outOfStock = stockAtual <= 0;
     
     return `<tr>
       <td><code>${escapeHtml(p.referencia)}</code></td>
       <td>${escapeHtml(p.designacao)} ${lowStock ? '<span class="badge badge-danger">⚠️ Baixo</span>' : ''}</td>
-      <td class="${lowStock ? 'stock-low' : 'stock-ok'}"><strong>${p.stockAtual}</strong></td>
+      <td class="${lowStock ? 'stock-low' : 'stock-ok'}"><strong>${stockAtual}</strong></td>
       <td>
         ${!outOfStock 
-            ? `<button class="btn btn-primary btn-sm" onclick="openRequisitar(${p.id}, '${escapeHtml(p.designacao)}', ${p.stockAtual})">➕ Usar</button>`
+            ? `<button class="btn btn-primary btn-sm" onclick="openRequisitar(${p.id}, '${escapeHtml(p.designacao)}', ${stockAtual})">➕ Usar</button>`
             : `<button class="btn btn-warning btn-sm" onclick="pedirEncomenda('${escapeHtml(p.designacao)}')">⚠️ Encomendar</button>`
         }
       </td>
@@ -484,8 +489,9 @@ async function submitRequisicao(e) {
     showToast('Peça retirada e Operação de Instalação criada!', 'success');
     hideModal('modal-requisitar');
     
-    // 3. Atualiza a vista (MANTÉM EM EXECUÇÃO, não precisa de esperar!)
+    // 3. Atualiza a vista com os novos materiais usados
     currentRepair = await api.getReparacao(currentRepair.id);
+    renderDetailPanel();
     openTrabalhosModal(); // Abre logo os trabalhos para ele ligar o cronómetro nessa peça
     
   } catch (err) { showToast('Erro: ' + err.message, 'error'); }

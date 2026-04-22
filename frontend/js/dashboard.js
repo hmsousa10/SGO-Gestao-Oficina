@@ -8,6 +8,9 @@ let kpiRefreshTimer = null;
 let chartEstadosInst = null;
 let chartValoresInst = null;
 let chartConcluidasInst = null;
+let recentReparacoesAll = [];
+let recentReparacoesPage = 1;
+const RECENT_REPARACOES_PAGE_SIZE = 4;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!initProtectedPage(['MANAGER'])) return;
@@ -72,27 +75,68 @@ async function loadRecentReparacoes() {
   if (!container) return;
   try {
     const all = await api.getReparacoes() || [];
-    // Sort by ID desc (most recent) and take first 5
-    const recent = [...all].sort((a, b) => b.id - a.id).slice(0, 5);
-    if (!recent.length) {
+    // Ordenar por mais recente e paginar em blocos de 4
+    recentReparacoesAll = [...all].sort((a, b) => b.id - a.id);
+    recentReparacoesPage = 1;
+
+    if (!recentReparacoesAll.length) {
       container.innerHTML = '<div class="empty-state" style="padding:2rem"><div class="empty-icon">🔩</div><div class="empty-desc">Sem reparações</div></div>';
       return;
     }
-    container.innerHTML = recent.map(r => `
-      <div class="recent-rep-item">
-        <div>
-          <div class="recent-rep-matricula">${escapeHtml(r.viaturaMatricula || '—')}</div>
-          <div class="recent-rep-cliente">${escapeHtml(r.clienteNome || 'Cliente desconhecido')}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:.75rem;">
-          ${getStatusBadge(r.estado)}
-          <span style="font-size:.75rem;color:var(--text-secondary)">${formatDate(r.dataInicio)}</span>
-        </div>
-      </div>
-    `).join('');
+
+    renderRecentReparacoesPage();
   } catch (_) {
     container.innerHTML = '<div class="loading-overlay" style="padding:1.5rem;font-size:.875rem;">Erro ao carregar</div>';
   }
+}
+
+function renderRecentReparacoesPage() {
+  const container = document.getElementById('recent-reps-list');
+  if (!container) return;
+
+  const totalItems = recentReparacoesAll.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / RECENT_REPARACOES_PAGE_SIZE));
+  if (recentReparacoesPage > totalPages) recentReparacoesPage = totalPages;
+  if (recentReparacoesPage < 1) recentReparacoesPage = 1;
+
+  const start = (recentReparacoesPage - 1) * RECENT_REPARACOES_PAGE_SIZE;
+  const pageItems = recentReparacoesAll.slice(start, start + RECENT_REPARACOES_PAGE_SIZE);
+
+  const listHtml = pageItems.map(r => `
+    <div class="recent-rep-item">
+      <div>
+        <div class="recent-rep-matricula">${escapeHtml(r.viaturaMatricula || '—')}</div>
+        <div class="recent-rep-cliente">${escapeHtml(r.clienteNome || 'Cliente desconhecido')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        ${getStatusBadge(r.estado)}
+        <span style="font-size:.75rem;color:var(--text-secondary)">${formatDate(r.dataInicio)}</span>
+      </div>
+    </div>
+  `).join('');
+
+  const paginationHtml = totalPages > 1 ? `
+    <div class="recent-reps-pagination">
+      <button class="btn btn-secondary btn-sm" onclick="changeRecentReparacoesPage(-1)" ${recentReparacoesPage === 1 ? 'disabled' : ''}>← Anterior</button>
+      <span class="recent-reps-page-info">Página ${recentReparacoesPage} de ${totalPages}</span>
+      <button class="btn btn-secondary btn-sm" onclick="changeRecentReparacoesPage(1)" ${recentReparacoesPage === totalPages ? 'disabled' : ''}>Seguinte →</button>
+    </div>
+  ` : '';
+
+  container.innerHTML = `
+    <div class="recent-reps-widget">
+      <div class="recent-reps-list">${listHtml}</div>
+      ${paginationHtml}
+    </div>
+  `;
+}
+
+function changeRecentReparacoesPage(delta) {
+  const totalPages = Math.max(1, Math.ceil(recentReparacoesAll.length / RECENT_REPARACOES_PAGE_SIZE));
+  const nextPage = recentReparacoesPage + delta;
+  if (nextPage < 1 || nextPage > totalPages) return;
+  recentReparacoesPage = nextPage;
+  renderRecentReparacoesPage();
 }
 
 /* ── CARREGAR DADOS REAIS PARA OS GRÁFICOS ── */
@@ -511,6 +555,7 @@ function openEditUser(id) {
     document.getElementById('user-id').value = user.id; 
     document.getElementById('user-name').value = user.name || ''; 
     document.getElementById('user-username').value = user.username || ''; 
+    document.getElementById('user-email').value = user.email || ''; 
     document.getElementById('user-role').value = user.role || ''; 
     const pwInput = document.getElementById('user-password');
     if (pwInput) {
@@ -527,6 +572,7 @@ async function submitUser(e) {
     const payload = { 
         name: document.getElementById('user-name').value.trim(), 
         username: document.getElementById('user-username').value.trim(), 
+    email: document.getElementById('user-email').value.trim() || null,
         role: document.getElementById('user-role').value 
     }; 
     const id = document.getElementById('user-id').value;
