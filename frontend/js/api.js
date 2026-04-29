@@ -4,7 +4,7 @@
 
 'use strict';
 
-const API_BASE = 'http://localhost:8080/sgo/api';
+const API_BASE = 'http://100.81.67.91:8080/sgo/api';
 
 function getHeaders() {
   const token = sessionStorage.getItem('sgo_token');
